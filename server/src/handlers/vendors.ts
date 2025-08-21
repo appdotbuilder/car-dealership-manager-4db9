@@ -1,45 +1,112 @@
+import { db } from '../db';
+import { vendorsTable, expensesTable } from '../db/schema';
 import { type CreateVendorInput, type UpdateVendorInput, type Vendor, type GetByIdInput } from '../schema';
+import { eq, asc, sql } from 'drizzle-orm';
 
 export async function createVendor(input: CreateVendorInput): Promise<Vendor> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is creating a new vendor record in the database.
-  return Promise.resolve({
-    id: 1,
-    name: input.name,
-    contact_info: input.contact_info || null,
-    created_at: new Date()
-  });
+  try {
+    const result = await db.insert(vendorsTable)
+      .values({
+        name: input.name,
+        contact_info: input.contact_info || null
+      })
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Vendor creation failed:', error);
+    throw error;
+  }
 }
 
 export async function updateVendor(input: UpdateVendorInput): Promise<Vendor> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is updating an existing vendor record.
-  // Should validate vendor exists and update only provided fields.
-  return Promise.resolve({
-    id: input.id,
-    name: input.name || 'placeholder_name',
-    contact_info: input.contact_info || null,
-    created_at: new Date()
-  });
+  try {
+    // First check if vendor exists
+    const existing = await db.select()
+      .from(vendorsTable)
+      .where(eq(vendorsTable.id, input.id))
+      .execute();
+
+    if (existing.length === 0) {
+      throw new Error(`Vendor with id ${input.id} not found`);
+    }
+
+    // Build update object with only provided fields
+    const updateData: any = {};
+    if (input.name !== undefined) updateData.name = input.name;
+    if (input.contact_info !== undefined) updateData.contact_info = input.contact_info;
+
+    const result = await db.update(vendorsTable)
+      .set(updateData)
+      .where(eq(vendorsTable.id, input.id))
+      .returning()
+      .execute();
+
+    return result[0];
+  } catch (error) {
+    console.error('Vendor update failed:', error);
+    throw error;
+  }
 }
 
 export async function getVendors(): Promise<Vendor[]> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is fetching all vendors from the database.
-  // Should sort by name alphabetically.
-  return Promise.resolve([]);
+  try {
+    const result = await db.select()
+      .from(vendorsTable)
+      .orderBy(asc(vendorsTable.name))
+      .execute();
+
+    return result;
+  } catch (error) {
+    console.error('Vendor retrieval failed:', error);
+    throw error;
+  }
 }
 
 export async function getVendorById(input: GetByIdInput): Promise<Vendor | null> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is fetching a single vendor by ID.
-  // Should return null if vendor not found.
-  return Promise.resolve(null);
+  try {
+    const result = await db.select()
+      .from(vendorsTable)
+      .where(eq(vendorsTable.id, input.id))
+      .execute();
+
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error('Vendor retrieval by ID failed:', error);
+    throw error;
+  }
 }
 
 export async function deleteVendor(input: GetByIdInput): Promise<{ success: boolean }> {
-  // This is a placeholder declaration! Real code should be implemented here.
-  // The goal of this handler is deleting a vendor record.
-  // Should check if vendor has associated expenses before deletion.
-  return Promise.resolve({ success: true });
+  try {
+    // First check if vendor exists
+    const existing = await db.select()
+      .from(vendorsTable)
+      .where(eq(vendorsTable.id, input.id))
+      .execute();
+
+    if (existing.length === 0) {
+      throw new Error(`Vendor with id ${input.id} not found`);
+    }
+
+    // Check if vendor has associated expenses
+    const expenseCount = await db.select({ count: sql<number>`count(*)` })
+      .from(expensesTable)
+      .where(eq(expensesTable.vendor_id, input.id))
+      .execute();
+
+    if (expenseCount[0].count > 0) {
+      throw new Error(`Cannot delete vendor with id ${input.id} because it has associated expenses`);
+    }
+
+    await db.delete(vendorsTable)
+      .where(eq(vendorsTable.id, input.id))
+      .execute();
+
+    return { success: true };
+  } catch (error) {
+    console.error('Vendor deletion failed:', error);
+    throw error;
+  }
 }
